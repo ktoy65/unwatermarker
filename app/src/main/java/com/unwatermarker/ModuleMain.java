@@ -41,14 +41,39 @@ public class ModuleMain extends XposedModule {
             })()
             """;
 
+    private ClassLoader appClassLoader;
+
+    @Override
+    public boolean onHotReloading(HotReloadingParam param) {
+        param.setSavedInstanceState(appClassLoader);
+        return true;
+    }
+
+    @Override
+    public void onHotReloaded(HotReloadedParam param) {
+        param.getOldHookHandles().forEach(h -> h.unhook());
+        ClassLoader cl = (ClassLoader) param.getSavedInstanceState();
+        if (cl == null) {
+            return;
+        }
+        if (tryLoad(CLS_MEITUAN_WATERMARK, cl) != null) {
+            hookMeituan(cl);
+        } else if (tryLoad(CLS_DADA_WATERMARK_UTIL, cl) != null) {
+            hookDada(cl);
+        } else {
+            hookH5Watermark();
+        }
+    }
+
     @Override
     public void onPackageReady(PackageReadyParam param) {
+        appClassLoader = param.getClassLoader();
         String pkg = param.getPackageName();
         try {
             if (PKG_MEITUAN.equals(pkg)) {
-                hookMeituan(param.getClassLoader());
+                hookMeituan(appClassLoader);
             } else if (PKG_DADA.equals(pkg)) {
-                hookDada(param.getClassLoader());
+                hookDada(appClassLoader);
             }
         } catch (Throwable ignored) {
         }
