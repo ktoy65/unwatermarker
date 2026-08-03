@@ -4,14 +4,24 @@ plugins {
     alias(libs.plugins.agp.app)
 }
 
+val keystorePropertiesFile = rootProject.file("keystore.properties")
 val keystoreProperties = Properties().apply {
-    val file = rootProject.file("keystore.properties")
-    if (file.exists()) {
-        file.inputStream().use { load(it) }
+    if (keystorePropertiesFile.exists()) {
+        keystorePropertiesFile.inputStream().use { load(it) }
     }
 }
 
-val hasSigning = keystoreProperties.getProperty("storeFile") != null
+val signingPropertyNames = listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
+val signingStoreFile = keystoreProperties.getProperty("storeFile")?.let(rootProject::file)
+val hasSigning = signingPropertyNames.all { !keystoreProperties.getProperty(it).isNullOrBlank() }
+        && signingStoreFile?.isFile == true
+val releaseRequested = gradle.startParameter.taskNames.any {
+    it.contains("release", ignoreCase = true)
+}
+
+if (releaseRequested && !hasSigning) {
+    throw GradleException("Release signing is not fully configured in keystore.properties")
+}
 
 android {
     namespace = "com.unwatermarker"
@@ -21,8 +31,8 @@ android {
     defaultConfig {
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.0.2"
     }
 
     signingConfigs {
@@ -41,7 +51,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles("proguard-rules.pro")
-            signingConfig = if (hasSigning) signingConfigs["release"] else signingConfigs["debug"]
+            signingConfig = if (hasSigning) signingConfigs["release"] else null
         }
     }
 

@@ -15,6 +15,9 @@ public class ModuleMain extends XposedModule {
     private static final String PKG_DADA = "com.dada.mobile.android";
 
     private static final String CLS_MEITUAN_WATERMARK = "com.meituan.banma.base.common.ui.view.WaterMarkView";
+    private static final String CLS_MEITUAN_WAYBILL_LIST_MODEL = "com.meituan.banma.waybill.list.model.j";
+    private static final String CLS_MEITUAN_ADDRESS_UTIL = "com.meituan.banma.waybill.util.a";
+    private static final String CLS_MEITUAN_ADDRESS_FORMAT = "com.meituan.banma.waybill.utils.k";
     private static final String CLS_DADA_WATERMARK_UTIL = "com.dada.mobile.delivery.utils.WaterMarkPageUtil";
 
     private static final String KILL_JS = """
@@ -85,7 +88,36 @@ public class ModuleMain extends XposedModule {
             hookVoidBySignature(wmv, "e", Activity.class);
             hookVoidBySignature(wmv, "a", Activity.class);
         }
+        hookOfflineSeeOrders(cl);
         hookH5Watermark();
+    }
+
+    private void hookOfflineSeeOrders(ClassLoader cl) {
+        Class<?> waybillListModel = tryLoad(CLS_MEITUAN_WAYBILL_LIST_MODEL, cl);
+        if (waybillListModel != null) {
+            hookByNameAndParamCount(waybillListModel, "b", 0, args -> false);
+        }
+
+        Class<?> addressUtil = tryLoad(CLS_MEITUAN_ADDRESS_UTIL, cl);
+        if (addressUtil != null) {
+            hookByNameAndParamCount(addressUtil, "a", 2, args -> args[1]);
+        }
+
+        Class<?> addressFormat = tryLoad(CLS_MEITUAN_ADDRESS_FORMAT, cl);
+        if (addressFormat != null) {
+            hookByNameAndParamCount(addressFormat, "a", 4, args -> {
+                Object poi = args[1];
+                Object door = args[2];
+                Object address = args[3];
+
+                if (hasText(poi)) {
+                    return hasText(door)
+                            ? poi + "（" + door + "）"
+                            : poi.toString();
+                }
+                return address;
+            });
+        }
     }
 
     private void hookDada(ClassLoader cl) {
@@ -128,6 +160,38 @@ public class ModuleMain extends XposedModule {
                 }
             }
         }
+    }
+
+    private void hookByNameAndParamCount(
+            Class<?> clazz,
+            String name,
+            int paramCount,
+            HookResultProvider resultProvider
+    ) {
+        for (Method method : clazz.getDeclaredMethods()) {
+            if (!method.getName().equals(name) || method.getParameterCount() != paramCount) {
+                continue;
+            }
+            try {
+                hook(method).setPriority(PRIORITY_HIGHEST).intercept(chain -> {
+                    Object[] args = new Object[paramCount];
+                    for (int i = 0; i < paramCount; i++) {
+                        args[i] = chain.getArg(i);
+                    }
+                    return resultProvider.get(args);
+                });
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
+    private boolean hasText(Object value) {
+        return value != null && !value.toString().isEmpty();
+    }
+
+    @FunctionalInterface
+    private interface HookResultProvider {
+        Object get(Object[] args);
     }
 
     private void hookH5Watermark() {

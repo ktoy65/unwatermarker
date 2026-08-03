@@ -6,3 +6,7 @@ local.properties
 *.iml
 keystore.properties
 keystore/
+*.jks
+*.keystore
+*.p12
+*.pem
