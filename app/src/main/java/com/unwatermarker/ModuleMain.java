@@ -13,12 +13,14 @@ public class ModuleMain extends XposedModule {
 
     private static final String PKG_MEITUAN = "com.sankuai.meituan.dispatch.crowdsource";
     private static final String PKG_DADA = "com.dada.mobile.android";
+    private static final String PKG_ELEME = "me.ele.crowdsource";
 
     private static final String CLS_MEITUAN_WATERMARK = "com.meituan.banma.base.common.ui.view.WaterMarkView";
     private static final String CLS_MEITUAN_WAYBILL_LIST_MODEL = "com.meituan.banma.waybill.list.model.j";
     private static final String CLS_MEITUAN_ADDRESS_UTIL = "com.meituan.banma.waybill.util.a";
     private static final String CLS_MEITUAN_ADDRESS_FORMAT = "com.meituan.banma.waybill.utils.k";
     private static final String CLS_DADA_WATERMARK_UTIL = "com.dada.mobile.delivery.utils.WaterMarkPageUtil";
+    private static final String CLS_ELEME_WATERMARK_MANAGER = "h31.b";
 
     private static final String KILL_JS = """
             (function(){
@@ -63,6 +65,8 @@ public class ModuleMain extends XposedModule {
             hookMeituan(cl);
         } else if (tryLoad(CLS_DADA_WATERMARK_UTIL, cl) != null) {
             hookDada(cl);
+        } else if (tryLoad(CLS_ELEME_WATERMARK_MANAGER, cl) != null) {
+            hookEleme(cl);
         } else {
             hookH5Watermark();
         }
@@ -77,6 +81,8 @@ public class ModuleMain extends XposedModule {
                 hookMeituan(appClassLoader);
             } else if (PKG_DADA.equals(pkg)) {
                 hookDada(appClassLoader);
+            } else if (PKG_ELEME.equals(pkg)) {
+                hookEleme(appClassLoader);
             }
         } catch (Throwable ignored) {
         }
@@ -135,6 +141,15 @@ public class ModuleMain extends XposedModule {
         hookH5Watermark();
     }
 
+    private void hookEleme(ClassLoader cl) {
+        Class<?> manager = tryLoad(CLS_ELEME_WATERMARK_MANAGER, cl);
+        if (manager == null) {
+            return;
+        }
+        hookVoidBySignature(manager, "a", Activity.class);
+        hookBooleanBySignature(manager, "h", Activity.class);
+    }
+
     private Class<?> tryLoad(String name, ClassLoader cl) {
         try {
             return Class.forName(name, false, cl);
@@ -147,6 +162,18 @@ public class ModuleMain extends XposedModule {
         try {
             Method m = clazz.getDeclaredMethod(name, params);
             hook(m).setPriority(PRIORITY_HIGHEST).intercept(chain -> null);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private void hookBooleanBySignature(Class<?> clazz, String name, Class<?>... params) {
+        try {
+            Method m = clazz.getDeclaredMethod(name, params);
+            Class<?> returnType = m.getReturnType();
+            if (returnType != boolean.class && returnType != Boolean.class) {
+                return;
+            }
+            hook(m).setPriority(PRIORITY_HIGHEST).intercept(chain -> false);
         } catch (Throwable ignored) {
         }
     }
